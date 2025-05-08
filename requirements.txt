@@ -3,4 +3,5 @@ yfinance
 pandas
 feedparser
 forex-python
-openai
+openai>=1.1.1
+
