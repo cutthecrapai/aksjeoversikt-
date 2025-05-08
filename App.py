@@ -37,4 +37,4 @@ data = []
 for navn, info in portfolio.items():
     ticker = yf.Ticker(info["ticker"])
     try:
-        hist = ticker.history(period="
+        hist = ticker.history(period="1d)
