@@ -1,21 +1,26 @@
 import streamlit as st
 import yfinance as yf
 import pandas as pd
-import feedparser
 from forex_python.converter import CurrencyRates
-from datetime import datetime, timedelta
+import openai
+from datetime import datetime
 
-st.set_page_config(page_title="Oles portefølje", layout="wide")
-st.title("Oles aksjeoversikt")
+st.set_page_config(page_title="Oles porteføljeassistent", layout="wide")
+st.title("Oles aksjeoversikt og markedsvurdering")
 
-# Hent live EUR→NOK-kurs
+# === OpenAI API-nøkkel ===
+api_key = st.text_input("OpenAI API-nøkkel (lim inn her – vises ikke)", type="password")
+if api_key:
+    openai.api_key = api_key
+
+# === Hent valutakurs EUR→NOK ===
 c = CurrencyRates()
 try:
     eur_to_nok = c.get_rate('EUR', 'NOK')
 except:
-    eur_to_nok = 11.50  # fallback hvis API feiler
+    eur_to_nok = 11.50
 
-# Porteføljeinfo
+# === Porteføljeinfo ===
 portfolio = {
     "BlueNord": {"ticker": "BNOR.OL", "antall": 166},
     "TGS": {"ticker": "TGS.OL", "antall": 376},
@@ -28,7 +33,7 @@ portfolio = {
 
 data = []
 
-# Pris og verdi
+# === Hent kurs og beregn verdi ===
 for navn, info in portfolio.items():
     ticker = yf.Ticker(info["ticker"])
     try:
@@ -39,10 +44,7 @@ for navn, info in portfolio.items():
     if not hist.empty:
         pris = hist["Close"].iloc[-1]
         valuta = info.get("valuta", "NOK")
-        if valuta == "EUR":
-            pris_nok = pris * eur_to_nok
-        else:
-            pris_nok = pris
+        pris_nok = pris * eur_to_nok if valuta == "EUR" else pris
         verdi = pris_nok * info["antall"]
         data.append({
             "Aksje": navn,
@@ -66,32 +68,47 @@ st.dataframe(df, use_container_width=True)
 totalverdi = df["Verdi (NOK)"].sum()
 st.subheader(f"Total porteføljeverdi: **{round(totalverdi, 2)} kr**")
 
-# Nyheter – samlet visning med dagens dato
-st.markdown("### Dagens nyheter")
+# === GPT-generert vurdering ===
+if api_key:
+    if st.button("Vis dagens vurdering"):
+        aksjeliste = "\n".join([f"- {row.name} ({row['Ticker']}): {row['Verdi (NOK)']} NOK" for _, row in df.iterrows()])
+        prompt = f"""
+Du er en økonomisk rådgiver. Her er brukerens aksjeportefølje i dag:
 
-nyhetskilder = {
-    "BlueNord": "https://news.google.com/rss/search?q=BlueNord",
-    "TGS": "https://news.google.com/rss/search?q=TGS+ASA",
-    "Elliptic Labs": "https://news.google.com/rss/search?q=Elliptic+Labs",
-    "GZUR": "https://news.google.com/rss/search?q=GSP+Resource+Corp+stock",
-    "Celestica": "https://news.google.com/rss/search?q=Celestica",
-    "Coinbase": "https://news.google.com/rss/search?q=Coinbase",
-    "WisdomTree Gold": "https://news.google.com/rss/search?q=WisdomTree+Physical+Swiss+Gold"
-}
+{aksjeliste}
 
-i_dag = datetime.utcnow().date()
-nyheter = []
+Basert på denne porteføljen, dagens markedsstemning og kjente faktorer – gi en rolig, ærlig vurdering av hver aksje.
+Unngå hype, vær analytisk og kortfattet. Kommentér gjerne om aksjen er stabil, risikabel, verdt å følge, eller har ny potensiell bevegelse.
 
-for navn, rss_url in nyhetskilder.items():
-    feed = feedparser.parse(rss_url)
-    for entry in feed.entries:
-        publ_dato = entry.get("published_parsed")
-        if publ_dato:
-            nyhetsdato = datetime(*publ_dato[:6]).date()
-            if nyhetsdato == i_dag:
-                nyheter.append((navn, entry.title, entry.link))
+Vis det som én kort oversikt til eieren.
+        """
+        with st.spinner("Henter vurdering..."):
+            response = openai.ChatCompletion.create(
+                model="gpt-4",
+                messages=[{"role": "user", "content": prompt}]
+            )
+            vurdering = response.choices[0].message.content
+            st.markdown("### Dagens porteføljevurdering:")
+            st.write(vurdering)
 
-# Vis nyheter i sortert rekkefølge
-for navn, tittel, link in sorted(nyheter, key=lambda x: x[0]):
-    st.markdown(f"- **[{navn}]**: [{tittel}]({link})")
+    if st.button("Vis dagens swing trade-forslag"):
+        prompt = f"""
+Du er en erfaren trader. Gi ett forslag til en mulig swing trade med tidsvindu 1–3 dager, basert på dagens markedsforhold (Norge og USA).
+Ta hensyn til volum, momentum, eventuelle nyheter og risiko. Skriv kort og konkret. Bruk følgende format:
 
+Aksje:  
+Anbefaling:  
+Bakgrunn:  
+Risiko:  
+Tidsvindu:
+        """
+        with st.spinner("Analyserer markedet..."):
+            response = openai.ChatCompletion.create(
+                model="gpt-4",
+                messages=[{"role": "user", "content": prompt}]
+            )
+            tips = response.choices[0].message.content
+            st.markdown("### Dagens swing trade-forslag:")
+            st.write(tips)
+else:
+    st.info("Lim inn OpenAI API-nøkkelen for å aktivere vurdering og swing trade-analyse.")
