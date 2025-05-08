@@ -1,34 +1,67 @@
 import streamlit as st
 import yfinance as yf
 import pandas as pd
+import feedparser
 
-st.title("Aksjeoversikt")
+st.set_page_config(page_title="Oles portefølje", layout="wide")
+st.title("Oles aksjeoversikt")
 
-tickers = {
-    "BlueNord": "BNOR.OL",
-    "TGS": "TGS.OL",
-    "Elliptic Labs": "ELABS.OL",
-    "C3.ai": "AI",
-    "Super Micro": "SMCI",
-    "Coinbase": "COIN"
+# Porteføljeinfo
+portfolio = {
+    "BlueNord": {"ticker": "BNOR.OL", "antall": 166},
+    "TGS": {"ticker": "TGS.OL", "antall": 376},
+    "Elliptic Labs": {"ticker": "ELABS.OL", "antall": 700},
+    "GZUR": {"ticker": "GZUR.OL", "antall": 62},
+    "Celestica": {"ticker": "CLS", "antall": 4},
+    "Coinbase": {"ticker": "COIN", "antall": 2}
 }
 
-data = {}
-for name, ticker in tickers.items():
-    stock = yf.Ticker(ticker)
-    hist = stock.history(period="5d")
-    if not hist.empty:
-        data[name] = {
-            "Ticker": ticker,
-            "Siste pris": round(hist["Close"][-1], 2)
-        }
+data = []
+grafdata = {}
 
-df = pd.DataFrame.from_dict(data, orient="index")
-st.dataframe(df)
-
-for name, ticker in tickers.items():
-    stock = yf.Ticker(ticker)
-    hist = stock.history(period="5d")
+# Hent priser og beregn verdi
+for navn, info in portfolio.items():
+    ticker = yf.Ticker(info["ticker"])
+    hist = ticker.history(period="7d")
     if not hist.empty:
-        st.subheader(name)
-        st.line_chart(hist["Close"])
+        pris = hist["Close"].iloc[-1]
+        verdi = pris * info["antall"]
+        data.append({
+            "Aksje": navn,
+            "Ticker": info["ticker"],
+            "Antall": info["antall"],
+            "Siste pris": round(pris, 2),
+            "Verdi": round(verdi, 2)
+        })
+        grafdata[navn] = hist["Close"]
+
+# Vis tabell
+df = pd.DataFrame(data).sort_values("Verdi", ascending=False).set_index("Aksje")
+st.dataframe(df, use_container_width=True)
+
+# Vis totalverdi
+totalverdi = df["Verdi"].sum()
+st.subheader(f"Total porteføljeverdi: **{round(totalverdi, 2)} kr**")
+
+# Kursgrafer
+st.markdown("### Kurs siste uke")
+for navn, kursserie in grafdata.items():
+    st.markdown(f"**{navn}**")
+    st.line_chart(kursserie)
+
+# Nyhetsoversikt
+st.markdown("### Nyheter om aksjene")
+nyhetskilder = {
+    "BlueNord": "https://news.google.com/rss/search?q=BlueNord",
+    "TGS": "https://news.google.com/rss/search?q=TGS+ASA",
+    "Elliptic Labs": "https://news.google.com/rss/search?q=Elliptic+Labs",
+    "GZUR": "https://news.google.com/rss/search?q=GZUR",
+    "Celestica": "https://news.google.com/rss/search?q=Celestica",
+    "Coinbase": "https://news.google.com/rss/search?q=Coinbase"
+}
+
+for navn, rss_url in nyhetskilder.items():
+    st.markdown(f"#### {navn}")
+    feed = feedparser.parse(rss_url)
+    for entry in feed.entries[:3]:
+        st.markdown(f"- [{entry.title}]({entry.link})")
