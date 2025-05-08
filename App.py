@@ -17,12 +17,11 @@ portfolio = {
 }
 
 data = []
-grafdata = {}
 
 # Hent priser og beregn verdi
 for navn, info in portfolio.items():
     ticker = yf.Ticker(info["ticker"])
-    hist = ticker.history(period="7d")
+    hist = ticker.history(period="1d")
     if not hist.empty:
         pris = hist["Close"].iloc[-1]
         verdi = pris * info["antall"]
@@ -33,21 +32,20 @@ for navn, info in portfolio.items():
             "Siste pris": round(pris, 2),
             "Verdi": round(verdi, 2)
         })
-        grafdata[navn] = hist["Close"]
+    else:
+        data.append({
+            "Aksje": navn,
+            "Ticker": info["ticker"],
+            "Antall": info["antall"],
+            "Siste pris": "Ingen data",
+            "Verdi": 0
+        })
 
-# Vis tabell
 df = pd.DataFrame(data).sort_values("Verdi", ascending=False).set_index("Aksje")
 st.dataframe(df, use_container_width=True)
 
-# Vis totalverdi
 totalverdi = df["Verdi"].sum()
 st.subheader(f"Total porteføljeverdi: **{round(totalverdi, 2)} kr**")
-
-# Kursgrafer
-st.markdown("### Kurs siste uke")
-for navn, kursserie in grafdata.items():
-    st.markdown(f"**{navn}**")
-    st.line_chart(kursserie)
 
 # Nyhetsoversikt
 st.markdown("### Nyheter om aksjene")
