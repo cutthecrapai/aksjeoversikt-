@@ -83,11 +83,15 @@ Unngå hype, vær analytisk og kortfattet. Kommentér gjerne om aksjen er stabil
 Vis det som én kort oversikt til eieren.
         """
         with st.spinner("Henter vurdering..."):
-            response = openai.ChatCompletion.create(
-                model="gpt-4",
-                messages=[{"role": "user", "content": prompt}]
-            )
-            vurdering = response.choices[0].message.content
+           from openai import OpenAI
+
+client = OpenAI(api_key=api_key)
+response = client.chat.completions.create(
+    model="gpt-4",
+    messages=[{"role": "user", "content": prompt}]
+)
+vurdering = response.choices[0].message.content
+
             st.markdown("### Dagens porteføljevurdering:")
             st.write(vurdering)
 
